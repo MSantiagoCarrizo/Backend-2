@@ -8,7 +8,7 @@ La plataforma permite administrar cursos de distintas categorías y gestionar la
 
 ## Temática
 
-La plataforma está orientada a la gestión de cursos y talleres.
+La plataforma está orientada a la gestión de cursos.
 
 Algunos cursos de ejemplo:
 
@@ -32,7 +32,7 @@ Algunos cursos de ejemplo:
 Clonar el repositorio:
 
 ```bash
-git clone <URL_DEL_REPOSITORIO>
+git clone https://github.com/MSantiagoCarrizo/Backend-2
 ```
 
 Instalar las dependencias:

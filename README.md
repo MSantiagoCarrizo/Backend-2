@@ -1,60 +1,46 @@
 # Plataforma de Cursos
 
-## Descripción
+API REST desarrollada con Node.js, Express y MongoDB para la gestión de cursos y usuarios.
 
-API REST desarrollada con Node.js y Express para la gestión de cursos e inscripciones.
-
-La plataforma permite administrar cursos de distintas categorías y gestionar las inscripciones de los usuarios.
-
-## Temática
-
-La plataforma está orientada a la gestión de cursos.
-
-Algunos cursos de ejemplo:
-
-- Curso de JavaScript
-- Curso de React
-- Curso de Node.js
-- Curso de MongoDB
-- Curso de Edición Audiovisual
-- Curso de Fotografía
-
-## Tecnologías
+## Tecnologías utilizadas
 
 - Node.js
 - Express
-- MongoDB
+- MongoDB Atlas
 - Mongoose
+- bcrypt
 - dotenv
 
 ## Instalación
 
-Clonar el repositorio:
+1. Clonar el repositorio:
 
 ```bash
 git clone https://github.com/MSantiagoCarrizo/Backend-2
 ```
 
-Instalar las dependencias:
+2. Ingresar al proyecto:
+
+```bash
+cd backend2-plataforma-cursos
+```
+
+3. Instalar dependencias:
 
 ```bash
 npm install
 ```
 
-## Variables de entorno
+4. Crear un archivo `.env` tomando como referencia `.env.example`.
 
-Crear un archivo `.env` tomando como referencia `.env.example`.
-
-Variables disponibles:
+Ejemplo:
 
 ```env
 PORT=8080
-NODE_ENV=development
-MONGO_URL=
-JWT_SECRET=
+MONGO_URL=tu_cadena_de_conexion
 ```
 
-## Ejecución
+5. Ejecutar el proyecto:
 
 Modo desarrollo:
 
@@ -68,11 +54,12 @@ Modo producción:
 npm start
 ```
 
-## Estructura del proyecto
+---
 
-```text
+# Estructura del proyecto
+
+```
 src
-│
 ├── config
 ├── controllers
 ├── dao
@@ -86,38 +73,118 @@ src
 └── server.js
 ```
 
-## Endpoints disponibles
+---
 
-### Health Check
+# Endpoints
 
-**GET** `/api/health`
+## Health
 
-Respuesta:
+### GET `/api/health`
 
-```json
-{
-  "status": "ok",
-  "message": "Servidor activo"
-}
-```
-
-### Cursos
-
-**GET** `/api/events`
+Verifica que el servidor esté funcionando.
 
 Respuesta:
 
 ```json
 {
   "status": "success",
-  "payload": []
+  "message": "Server running"
 }
 ```
 
-En esta implementación, cada **Event** representa un curso disponible para inscripción.
+---
 
-### Sessions
+## Events
 
-**GET** `/api/sessions`
+### GET `/api/events`
 
-Endpoint inicial para la gestión de sesiones de usuarios.
+Obtiene la lista de eventos.
+
+---
+
+## Sessions
+
+### GET `/api/sessions`
+
+Endpoint de prueba para sesiones.
+
+Respuesta:
+
+```json
+{
+  "status": "success",
+  "message": "Sessions endpoint"
+}
+```
+
+---
+
+## Registro de usuarios
+
+### POST `/api/sessions/register`
+
+Registra un nuevo usuario.
+
+### Body
+
+```json
+{
+  "first_name": "Santiago",
+  "last_name": "Carrizo",
+  "email": "santiago@gmail.com",
+  "password": "123456"
+}
+```
+
+### Respuesta exitosa (201)
+
+```json
+{
+  "status": "success",
+  "payload": {
+    "id": "665f2a...",
+    "first_name": "Santiago",
+    "last_name": "Carrizo",
+    "email": "santiago@gmail.com",
+    "role": "user"
+  }
+}
+```
+
+### Posibles respuestas de error
+
+**400 - Campos obligatorios**
+
+```json
+{
+  "status": "error",
+  "message": "Faltan campos obligatorios"
+}
+```
+
+**400 - Email inválido**
+
+```json
+{
+  "status": "error",
+  "message": "El formato del email no es válido"
+}
+```
+
+**400 - Contraseña inválida**
+
+```json
+{
+  "status": "error",
+  "message": "La contraseña debe tener al menos 6 caracteres"
+}
+```
+
+**409 - Email duplicado**
+
+```json
+{
+  "status": "error",
+  "message": "El email ya está registrado"
+}
+```

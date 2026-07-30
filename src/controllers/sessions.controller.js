@@ -1,7 +1,19 @@
-export const getSessions = async (req, res) => {
+import sessionsService from "../services/sessions.service.js";
+
+export const getSessions = async (req, res, next) => {
     try {
-        res.status(200).json({ status: "success", message: "Sessions endpoint" });
+        return res.status(200).json({ status: "success", message: "Sessions endpoint" });
     } catch (error) {
-        res.status(500).json({ status: "error", message: error.message });
+        next(error);
+    }
+};
+
+export const register = async (req, res, next) => {
+    try {
+        const user = await sessionsService.register(req.body);
+
+        return res.status(201).json({ status: "success", payload: user });
+    } catch (error) {
+        next(error);
     }
 };

@@ -34,3 +34,20 @@ export const login = async (req, res, next) => {
         next(error);
     }
 };
+
+export const current = async (req, res, next) => {
+    try {
+        const { id, email, role } = req.user;
+
+        return res.status(200).json({
+            status: "success",
+            payload: {
+                id,
+                email,
+                role
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};

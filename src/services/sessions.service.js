@@ -1,7 +1,9 @@
 import usersRepository from "../repositories/users.repository.js";
-import { createHash } from "../utils/hash.js";
+import { createHash, isValidPassword } from "../utils/hash.js";
+import { generateToken } from "../utils/jwt.js";
 
 class SessionsService {
+
     async register(userData) {
         const { first_name, last_name, email, password } = userData;
 
@@ -52,6 +54,47 @@ class SessionsService {
             last_name: newUser.last_name,
             email: newUser.email,
             role: newUser.role
+        };
+    }
+
+    async login(userData) {
+        const { email, password } = userData;
+
+        if (!email || !password) {
+            const error = new Error("Email y contraseña son obligatorios");
+            error.statusCode = 400;
+            throw error;
+        }
+
+        const normalizedEmail = email.trim().toLowerCase();
+
+        const user = await usersRepository.getUserByEmail(normalizedEmail);
+
+        if (!user) {
+            const error = new Error("Credenciales inválidas");
+            error.statusCode = 401;
+            throw error;
+        }
+
+        const validPassword = isValidPassword(password, user.password);
+
+        if (!validPassword) {
+            const error = new Error("Credenciales inválidas");
+            error.statusCode = 401;
+            throw error;
+        }
+
+        const tokenUser = {
+            id: user._id,
+            email: user.email,
+            role: user.role
+        };
+
+        const token = generateToken(tokenUser);
+
+        return {
+            token,
+            user: tokenUser
         };
     }
 }

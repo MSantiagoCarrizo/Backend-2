@@ -51,3 +51,13 @@ export const current = async (req, res, next) => {
         next(error);
     }
 };
+
+export const logout = async (req, res, next) => {
+    try {
+        res.clearCookie("currentUser");
+
+        return res.status(200).json({ status: "success", message: "Sesión cerrada" });
+    } catch (error) {
+        next(error);
+    }
+};

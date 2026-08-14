@@ -1,7 +1,7 @@
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import usersRepository from "../repositories/users.repository.js";
-import { createHash } from "../utils/hash.js";
+import { createHash, isValidPassword } from "../utils/hash.js";
 
 passport.use(
     "register",
@@ -58,6 +58,53 @@ passport.use(
                 });
 
                 return done(null, newUser);
+            } catch (error) {
+                return done(error);
+            }
+        }
+    )
+);
+
+
+passport.use(
+    "login",
+    new LocalStrategy(
+        {
+            usernameField: "email",
+            passwordField: "password"
+        },
+        async (email, password, done) => {
+            try {
+                if (!email || !password) {
+                    return done(null, false, {
+                        message: "Email y contraseña son obligatorios"
+                    });
+                }
+
+                const normalizedEmail = email.trim().toLowerCase();
+
+                const user = await usersRepository.getUserByEmail(
+                    normalizedEmail
+                );
+
+                if (!user) {
+                    return done(null, false, {
+                        message: "Credenciales inválidas"
+                    });
+                }
+
+                const validPassword = isValidPassword(
+                    password,
+                    user.password
+                );
+
+                if (!validPassword) {
+                    return done(null, false, {
+                        message: "Credenciales inválidas"
+                    });
+                }
+
+                return done(null, user);
             } catch (error) {
                 return done(error);
             }

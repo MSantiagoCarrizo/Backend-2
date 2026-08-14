@@ -1,4 +1,4 @@
-import sessionsService from "../services/sessions.service.js";
+import { generateToken } from "../utils/jwt.js";
 
 export const getSessions = async (req, res, next) => {
     try {
@@ -32,7 +32,13 @@ export const register = async (req, res, next) => {
 
 export const login = async (req, res, next) => {
     try {
-        const { token } = await sessionsService.login(req.body);
+        const tokenUser = {
+            id: req.user._id,
+            email: req.user.email,
+            role: req.user.role
+        };
+
+        const token = generateToken(tokenUser);
 
         res.cookie("currentUser", token, {
             httpOnly: true,
@@ -41,10 +47,7 @@ export const login = async (req, res, next) => {
             secure: process.env.NODE_ENV === "production"
         });
 
-        return res.status(200).json({
-            status: "success",
-            message: "Login correcto"
-        });
+        return res.status(200).json({ status: "success", message: "Login correcto" });
     } catch (error) {
         next(error);
     }

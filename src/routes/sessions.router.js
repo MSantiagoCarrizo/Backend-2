@@ -1,12 +1,5 @@
 import { Router } from "express";
-import {
-    getSessions,
-    register,
-    login,
-    current,
-    logout
-} from "../controllers/sessions.controller.js";
-import { authMiddleware } from "../middlewares/auth.middleware.js";
+import { getSessions, register, login, current, logout } from "../controllers/sessions.controller.js";
 import passport from "passport";
 
 const router = Router();
@@ -108,6 +101,6 @@ router.get(
     current
 );
 
-router.post("/logout", authMiddleware, logout);
+router.post("/logout", logout);
 
 export default router;

@@ -2,6 +2,7 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import usersRepository from "../repositories/users.repository.js";
 import { createHash, isValidPassword } from "../utils/hash.js";
+import { Strategy as JwtStrategy, ExtractJwt } from "passport-jwt";
 
 passport.use(
     "register",
@@ -105,6 +106,25 @@ passport.use(
                 }
 
                 return done(null, user);
+            } catch (error) {
+                return done(error);
+            }
+        }
+    )
+);
+
+passport.use(
+    "current",
+    new JwtStrategy(
+        {
+            jwtFromRequest: ExtractJwt.fromExtractors([
+                (req) => req.cookies.currentUser
+            ]),
+            secretOrKey: process.env.JWT_SECRET
+        },
+        async (payload, done) => {
+            try {
+                return done(null, payload);
             } catch (error) {
                 return done(error);
             }

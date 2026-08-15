@@ -1,14 +1,20 @@
 import { Router } from "express";
-import { getSessions, register, login, current, logout } from "../controllers/sessions.controller.js";
+import {
+    getSessions,
+    register,
+    login,
+    current,
+    logout
+} from "../controllers/sessions.controller.js";
 import { authMiddleware } from "../middlewares/auth.middleware.js";
 import passport from "passport";
 
 const router = Router();
 
 router.get("/", getSessions);
+
 router.post(
     "/register",
-    { session: false },
     (req, res, next) => {
         passport.authenticate(
             "register",
@@ -39,9 +45,9 @@ router.post(
     },
     register
 );
+
 router.post(
     "/login",
-    { session: false },
     (req, res, next) => {
         passport.authenticate(
             "login",
@@ -68,7 +74,40 @@ router.post(
     },
     login
 );
-router.get("/current", authMiddleware, current);
+
+router.get(
+    "/current",
+    (req, res, next) => {
+        passport.authenticate(
+            "current",
+            { session: false },
+            (error, user, info) => {
+                if (error) {
+                    const authError = new Error("Token inválido o expirado");
+                    authError.statusCode = 401;
+                    return next(authError);
+                }
+
+                if (!user) {
+                    const message =
+                        info?.message === "No auth token"
+                            ? "No autenticado"
+                            : "Token inválido o expirado";
+
+                    const authError = new Error(message);
+                    authError.statusCode = 401;
+
+                    return next(authError);
+                }
+
+                req.user = user;
+                next();
+            }
+        )(req, res, next);
+    },
+    current
+);
+
 router.post("/logout", authMiddleware, logout);
 
 export default router;

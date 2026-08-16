@@ -122,12 +122,8 @@ passport.use(
             ]),
             secretOrKey: process.env.JWT_SECRET
         },
-        async (payload, done) => {
-            try {
-                return done(null, payload);
-            } catch (error) {
-                return done(error);
-            }
+        (payload, done) => {
+            return done(null, payload);
         }
     )
 );

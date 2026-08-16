@@ -1,6 +1,7 @@
 # Plataforma de Cursos
 
-API REST desarrollada con Node.js, Express y MongoDB para la gestión de usuarios y autenticación mediante JWT y cookies HTTP Only.
+API REST desarrollada con Node.js, Express y MongoDB para la gestión de usuarios y autenticación mediante Passport.js, JWT y cookies HTTP Only.
+
 
 
 ## Tecnologías utilizadas
@@ -13,6 +14,9 @@ API REST desarrollada con Node.js, Express y MongoDB para la gestión de usuario
 - dotenv
 - jsonwebtoken
 - cookie-parser
+- passport.js
+- passport-local
+- passport-jwt
 
 ## Instalación
 
@@ -81,6 +85,60 @@ src
 
 ---
 
+# Autenticación con Passport.js
+
+La autenticación se encuentra centralizada mediante estrategias de Passport.js.
+
+## Estrategia `register`
+
+La estrategia de registro se encarga de:
+
+- Validar los campos obligatorios.
+- Normalizar nombre, apellido y email.
+- Validar el formato del email.
+- Verificar que el email no se encuentre registrado.
+- Validar la longitud mínima de la contraseña.
+- Hashear la contraseña utilizando bcrypt.
+- Crear el usuario mediante el repositorio.
+- Mantener el rol user por defecto sin permitir su manipulación desde el body.
+
+## Estrategia `login`
+
+La estrategia de login se encarga de:
+
+- Validar la presencia de email y contraseña.
+- Normalizar el email.
+- Buscar el usuario registrado.
+- Comparar la contraseña ingresada con el hash almacenado mediante bcrypt.
+- Rechazar credenciales inválidas utilizando un mensaje genérico.
+
+Una vez autenticado correctamente, el controller genera el JWT y lo almacena en la cookie currentUser.
+
+## Estrategia `current`
+
+La estrategia current se encarga de:
+
+- Obtener el JWT desde la cookie `currentUser`.
+- Verificar el token utilizando `JWT_SECRET`.
+- Validar su firma y expiración.
+- Dejar la información del usuario disponible en `req.user`.
+
+La ruta devuelve únicamente:
+
+- `id`
+- `email`
+- `role`
+
+La contraseña nunca se incluye en el JWT ni en las respuestas.
+
+Las estrategias se encuentran centralizadas en:
+
+`src/config/passport.config.js`
+
+El sistema queda preparado para incorporar futuras estrategias de autenticación mediante providers externos como Google o GitHub sin modificar la inicialización de Passport en `app.js`.
+
+---
+
 # Endpoints
 
 ## Health
@@ -131,7 +189,7 @@ Respuesta:
 
 ### POST `/api/sessions/register`
 
-Registra un nuevo usuario.
+Registra un nuevo usuario mediante la estrategia `register` de Passport.js.
 
 ### Body
 
@@ -202,7 +260,7 @@ Registra un nuevo usuario.
 
 ### POST `/api/sessions/login`
 
-Autentica un usuario y genera una cookie HTTP Only con un JWT.
+Autentica un usuario mediante la estrategia `login` de Passport.js y genera una cookie HTTP Only con un JWT.
 
 ### Body
 
@@ -222,6 +280,29 @@ Autentica un usuario y genera una cookie HTTP Only con un JWT.
 }
 ```
 
+La respuesta exitosa establece la cookie:
+
+```json
+currentUser
+```
+
+La cookie contiene el JWT y está configurada como:
+
+- `httpOnly: true`
+- `sameSite: "lax"`
+- `maxAge: 3600000`
+- `secure: true` solamente en producción
+
+El JWT contiene únicamente información básica del usuario:
+
+```json
+{
+  "id": "665f2a...",
+  "email": "santiago@gmail.com",
+  "role": "user"
+}
+```
+
 ### Error (401)
 
 ```json
@@ -237,7 +318,9 @@ Autentica un usuario y genera una cookie HTTP Only con un JWT.
 
 ### GET `/api/sessions/current`
 
-Ruta protegida que devuelve la información del usuario autenticado.
+Ruta protegida mediante la estrategia `current` de Passport.js.
+
+La estrategia obtiene el JWT desde la cookie `currentUser`, verifica el token y deja el usuario disponible en `req.user`.
 
 ### Respuesta exitosa (200)
 
@@ -252,12 +335,21 @@ Ruta protegida que devuelve la información del usuario autenticado.
 }
 ```
 
-### Error (401)
+### Error (401) - Sin cookie
 
 ```json
 {
   "status": "error",
   "message": "No autenticado"
+}
+```
+
+### Error (401) - Token inválido o expirado
+
+```json
+{
+  "status": "error",
+  "message": "Token inválido o expirado"
 }
 ```
 
@@ -280,15 +372,37 @@ Elimina la cookie de autenticación y cierra la sesión.
 
 ---
 
+# Variables de entorno 
+
+El proyecto utiliza variables de entorno para configurar el servidor, la conexión a MongoDB y la autenticación mediante JWT.
+
+El archivo `.env` contiene los valores reales y no debe subirse al repositorio.
+
+El archivo `.env.example` contiene las variables necesarias sin credenciales reales.
+
+```env
+PORT=8080
+MONGO_URL=tu_cadena_de_conexion
+JWT_SECRET=tu_clave_secreta
+JWT_EXPIRES_IN=1h
+NODE_ENV=development
+```
+
+---
+
 # Seguridad implementada
 
 - Contraseñas hasheadas con bcrypt.
 - JWT firmado mediante jsonwebtoken.
 - Cookie HTTP Only.
-- Middleware de autenticación.
 - Validación de email duplicado.
 - Normalización de email.
 - Manejo global de errores.
+- Estrategias de autenticación mediante Passport.js
+- No se devuelve la contraseña en las respuestas.
+- La contraseña no forma parte del payload del JWT.
+- `JWT_SECRET` se obtiene desde variables de entorno.
+- La cookie utiliza `secure: true` solamente en producción
 
 ---
 

@@ -254,7 +254,7 @@ Registra un nuevo usuario mediante la estrategia `register` de Passport.js.
   "message": "El email ya está registrado"
 }
 ```
---
+---
 
 ## Login
 
@@ -408,4 +408,4 @@ NODE_ENV=development
 
 # Autor
 
-Marcos Carrizo
+Marcos Santiago Carrizo

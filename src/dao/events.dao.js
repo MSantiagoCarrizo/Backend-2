@@ -8,6 +8,14 @@ class EventsDAO {
     async getEvents() {
         return await Event.find();
     }
+
+    async getEventById(id) {
+        return await Event.findById(id);
+    }
+
+    async updateEvent(id, eventData) {
+        return await Event.findByIdAndUpdate(id, eventData, { new: true });
+    }
 }
 
 export default new EventsDAO();

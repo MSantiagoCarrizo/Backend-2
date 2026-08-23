@@ -25,6 +25,30 @@ class EventsService {
 
         return newEvent;
     }
+
+    async getEventById(id) {
+        const event = await eventsRepository.getEventById(id);
+
+        if (!event) {
+            const error = new Error("Evento no encontrado");
+            error.statusCode = 404;
+            throw error;
+        }
+
+        return event;
+    }
+
+    async updateEvent(id, eventData) {
+        const { title, description, date, location, capacity } = eventData;
+
+        return await eventsRepository.updateEvent(id, {
+            title,
+            description,
+            date,
+            location,
+            capacity
+        });
+    }
 }
 
 export default new EventsService();

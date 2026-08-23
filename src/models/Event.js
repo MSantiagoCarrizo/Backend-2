@@ -6,7 +6,12 @@ const eventSchema = new mongoose.Schema(
         description: String,
         date: Date,
         location: String,
-        capacity: Number
+        capacity: Number,
+        organizer: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            required: true
+        }
     },
     {
         timestamps: true

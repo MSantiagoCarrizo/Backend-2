@@ -19,3 +19,15 @@ export const createEvent = async (req, res, next) => {
         next(error);
     }
 };
+
+export const updateEvent = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+
+        const updatedEvent = await eventsService.updateEvent(id, req.body);
+
+        return res.status(200).json({ status: "success", payload: updatedEvent });
+    } catch (error) {
+        next(error);
+    }
+};

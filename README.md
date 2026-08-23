@@ -2,8 +2,6 @@
 
 API REST desarrollada con Node.js, Express y MongoDB para la gestión de usuarios y autenticación mediante Passport.js, JWT y cookies HTTP Only.
 
-
-
 ## Tecnologías utilizadas
 
 - Node.js
@@ -162,9 +160,176 @@ Respuesta:
 
 ### GET `/api/events`
 
-Obtiene la lista de eventos.
+Obtiene la lista de eventos. Ruta pública, no requiere autenticación.
 
-> Actualmente este módulo se encuentra en desarrollo.
+### Respuesta exitosa (200)
+
+```json
+{
+  "status": "success",
+  "payload": [
+    {
+      "_id": "66f...",
+      "title": "Curso de JavaScript",
+      "description": "Introducción a JS moderno",
+      "date": "2026-09-15T00:00:00.000Z",
+      "location": "Online",
+      "capacity": 30,
+      "organizer": "66a...",
+      "createdAt": "...",
+      "updatedAt": "..."
+    }
+  ]
+}
+```
+
+---
+
+### POST `/api/events`
+
+Crea un evento nuevo. Requiere estar autenticado y tener rol `organizer` o `admin`. El campo `organizer` se asigna automáticamente a partir del usuario autenticado; nunca se toma del body.
+
+### Body
+
+```json
+{
+  "title": "Curso de JavaScript",
+  "description": "Introducción a JS moderno",
+  "date": "2026-09-15",
+  "location": "Online",
+  "capacity": 30
+}
+```
+
+### Respuesta exitosa (201)
+
+```json
+{
+  "status": "success",
+  "payload": {
+    "_id": "66f...",
+    "title": "Curso de JavaScript",
+    "organizer": "66a...",
+    "createdAt": "...",
+    "updatedAt": "..."
+  }
+}
+```
+
+### Posibles respuestas de error
+
+**401 - No autenticado**
+
+```json
+{ "status": "error", "message": "No autenticado" }
+```
+
+**403 - Rol sin permiso**
+
+```json
+{ "status": "error", "message": "No tenés permisos para realizar esta acción" }
+```
+
+**400 - Campos obligatorios**
+
+```json
+{ "status": "error", "message": "Faltan campos obligatorios" }
+```
+
+---
+
+### PUT `/api/events/:id`
+
+Actualiza un evento existente. Requiere estar autenticado y tener rol `organizer` o `admin`. Si el rol es `organizer`, solo puede modificar eventos de los que es dueño. El rol `admin` puede modificar cualquier evento.
+
+### Body
+
+```json
+{
+  "title": "Curso de JavaScript (actualizado)",
+  "capacity": 40
+}
+```
+
+### Respuesta exitosa (200)
+
+```json
+{
+  "status": "success",
+  "payload": {
+    "_id": "66f...",
+    "title": "Curso de JavaScript (actualizado)",
+    "capacity": 40
+  }
+}
+```
+
+### Posibles respuestas de error
+
+**401 - No autenticado**
+
+```json
+{ "status": "error", "message": "No autenticado" }
+```
+
+**403 - Rol sin permiso**
+
+```json
+{ "status": "error", "message": "No tenés permisos para realizar esta acción" }
+```
+
+**403 - No es el dueño del evento**
+
+```json
+{ "status": "error", "message": "No tenés permisos para modificar este evento" }
+```
+
+**404 - Evento no encontrado**
+
+```json
+{ "status": "error", "message": "Evento no encontrado" }
+```
+
+---
+
+## Usuarios (admin)
+
+### GET `/api/users`
+
+Devuelve la lista completa de usuarios registrados, sin incluir contraseñas. Ruta exclusiva para el rol `admin`.
+
+### Respuesta exitosa (200)
+
+```json
+{
+  "status": "success",
+  "payload": [
+    {
+      "_id": "66a...",
+      "first_name": "Marco",
+      "last_name": "Carrizo",
+      "email": "marco@ejemplo.com",
+      "role": "admin",
+      "createdAt": "...",
+      "updatedAt": "..."
+    }
+  ]
+}
+```
+
+### Posibles respuestas de error
+
+**401 - No autenticado**
+
+```json
+{ "status": "error", "message": "No autenticado" }
+```
+
+**403 - Rol sin permiso** (por ejemplo, `user` u `organizer`)
+
+```json
+{ "status": "error", "message": "No tenés permisos para realizar esta acción" }
+```
 
 ---
 
@@ -372,6 +537,55 @@ Elimina la cookie de autenticación y cierra la sesión.
 
 ---
 
+# Roles y autorización
+
+El sistema diferencia dos conceptos: **autenticación** (¿quién sos?) y **autorización** (¿qué podés hacer?). Un usuario puede estar autenticado y aun así no tener permiso para realizar una acción determinada.
+
+## Roles del sistema
+
+- **`user`**: usuario común. Puede consultar eventos.
+- **`organizer`**: puede crear eventos y modificar únicamente los eventos de los que es dueño.
+- **`admin`**: puede modificar cualquier evento y administrar usuarios.
+
+El rol se asigna por defecto como `user` al registrarse y **nunca** puede asignarse desde el body de una petición pública. Solo se modifica manualmente en la base de datos.
+
+## Matriz de permisos
+
+| Acción | user | organizer | admin |
+|---|---|---|---|
+| Consultar eventos | ✅ | ✅ | ✅ |
+| Crear eventos | ❌ | ✅ | ✅ |
+| Modificar eventos propios | ❌ | ✅ | ✅ |
+| Modificar cualquier evento | ❌ | ❌ | ✅ |
+| Ver todos los usuarios | ❌ | ❌ | ✅ |
+
+## Diferencia entre 401 y 403
+
+- **401 (Unauthorized)**: no se pudo identificar al usuario. No envió cookie, la cookie no existe, o el token es inválido/expiró.
+- **403 (Forbidden)**: el usuario sí está autenticado, pero su rol (o la propiedad del recurso) no le permite realizar la acción.
+
+## Middlewares de autorización
+
+- **`auth.middleware.js`**: valida el JWT desde la cookie `currentUser` (reutilizando la estrategia `current` de Passport) y responde 401 si no hay sesión válida.
+- **`authorize.middleware.js`** (`authorizeRoles`): recibe los roles permitidos para una ruta y responde 403 si el rol del usuario autenticado no está entre ellos.
+- **`eventOwnership.middleware.js`** (`authorizeEventOwnerOrAdmin`): para rutas que modifican un evento puntual, valida que el usuario sea el `organizer` dueño del evento o tenga rol `admin`. Responde 404 si el evento no existe, y 403 si no es el dueño ni admin.
+
+Estas validaciones se combinan en cadena en las rutas protegidas, por ejemplo:
+
+```js
+router.put(
+    "/:id",
+    auth,
+    authorizeRoles("organizer", "admin"),
+    authorizeEventOwnerOrAdmin,
+    updateEvent
+);
+```
+
+Primero se valida identidad (401), después rol (403), y por último propiedad del recurso (403/404).
+
+---
+
 # Variables de entorno 
 
 El proyecto utiliza variables de entorno para configurar el servidor, la conexión a MongoDB y la autenticación mediante JWT.
@@ -403,6 +617,10 @@ NODE_ENV=development
 - La contraseña no forma parte del payload del JWT.
 - `JWT_SECRET` se obtiene desde variables de entorno.
 - La cookie utiliza `secure: true` solamente en producción
+- Autorización por rol mediante middleware reutilizable (`authorizeRoles`).
+- Validación de propiedad de recursos: un `organizer` solo modifica sus propios eventos.
+- Diferenciación explícita entre error de autenticación (401) y de autorización (403).
+- El rol de un usuario nunca se toma del body de una petición pública.
 
 ---
 

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getEvents, getEventById, createEvent, updateEvent } from "../controllers/events.controller.js";
+import { getEvents, getEventById, createEvent, updateEvent, updateEventStatus } from "../controllers/events.controller.js";
 import { auth } from "../middlewares/auth.middleware.js";
 import { authorizeRoles } from "../middlewares/authorize.middleware.js";
 import { authorizeEventOwnerOrAdmin } from "../middlewares/eventOwnership.middleware.js";
@@ -23,6 +23,14 @@ router.put(
     authorizeRoles("organizer", "admin"),
     authorizeEventOwnerOrAdmin,
     updateEvent
+);
+
+router.patch(
+    "/:id/status",
+    auth,
+    authorizeRoles("organizer", "admin"),
+    authorizeEventOwnerOrAdmin,
+    updateEventStatus
 );
 
 export default router;

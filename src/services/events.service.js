@@ -166,6 +166,32 @@ class EventsService {
 
         return await eventsRepository.updateEvent(id, updateData);
     }
+
+    async updateEventStatus(id, status) {
+        const allowedStatuses = ["draft", "published", "cancelled", "finished"];
+
+        if (!allowedStatuses.includes(status)) {
+            const error = new Error("Estado inválido");
+            error.statusCode = 400;
+            throw error;
+        }
+
+        const event = await this.getEventById(id);
+
+        if (event.status === "cancelled" || event.status === "finished") {
+            const error = new Error("No se puede modificar el estado de un evento cancelado o finalizado");
+            error.statusCode = 400;
+            throw error;
+        }
+
+        if (status === "published" && event.date <= new Date()) {
+            const error = new Error("No se puede publicar un evento que ya finalizó");
+            error.statusCode = 400;
+            throw error;
+        }
+
+        return await eventsRepository.updateEvent(id, { status });
+    }
 }
 
 export default new EventsService();

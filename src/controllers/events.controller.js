@@ -10,6 +10,18 @@ export const getEvents = async (req, res, next) => {
     }
 };
 
+export const getEventById = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+
+        const event = await eventsService.getEventById(id);
+
+        return res.status(200).json({ status: "success", payload: event });
+    } catch (error) {
+        next(error);
+    }
+};
+
 export const createEvent = async (req, res, next) => {
     try {
         const newEvent = await eventsService.createEvent(req.body, req.user.id);

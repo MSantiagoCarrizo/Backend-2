@@ -10,7 +10,9 @@ class EventsDAO {
     }
 
     async getEventById(id) {
-        return await Event.findById(id);
+        return await Event.findById(id)
+            .populate("category")
+            .populate("organizer", "first_name last_name email");
     }
 
     async updateEvent(id, eventData) {

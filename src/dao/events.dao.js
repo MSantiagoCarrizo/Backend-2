@@ -16,7 +16,10 @@ class EventsDAO {
     }
 
     async updateEvent(id, eventData) {
-        return await Event.findByIdAndUpdate(id, eventData, { new: true });
+        return await Event.findByIdAndUpdate(id, eventData, {
+            new: true,
+            runValidators: true
+        });
     }
 }
 

@@ -89,15 +89,82 @@ class EventsService {
     }
 
     async updateEvent(id, eventData) {
-        const { title, description, date, location, capacity } = eventData;
+        const event = await this.getEventById(id);
 
-        return await eventsRepository.updateEvent(id, {
-            title,
-            description,
-            date,
-            location,
-            capacity
-        });
+        if (event.status === "cancelled") {
+            const error = new Error("No se puede modificar un evento cancelado");
+            error.statusCode = 400;
+            throw error;
+        }
+
+        if (event.status === "finished") {
+            const error = new Error("No se puede modificar un evento que ya finalizó");
+            error.statusCode = 400;
+            throw error;
+        }
+
+        const { title, description, category, date, location, capacity, price } = eventData;
+        const updateData = {};
+
+        if (title !== undefined) updateData.title = title;
+        if (description !== undefined) updateData.description = description;
+        if (location !== undefined) updateData.location = location;
+
+        if (category !== undefined) {
+            if (!mongoose.Types.ObjectId.isValid(category)) {
+                const error = new Error("La categoría indicada no existe");
+                error.statusCode = 400;
+                throw error;
+            }
+
+            const categoryExists = await categoriesRepository.getCategoryById(category);
+
+            if (!categoryExists) {
+                const error = new Error("La categoría indicada no existe");
+                error.statusCode = 400;
+                throw error;
+            }
+
+            updateData.category = category;
+        }
+
+        if (capacity !== undefined) {
+            if (Number(capacity) <= 0) {
+                const error = new Error("La capacidad debe ser mayor a cero");
+                error.statusCode = 400;
+                throw error;
+            }
+            updateData.capacity = capacity;
+        }
+
+        if (price !== undefined) {
+            if (Number(price) < 0) {
+                const error = new Error("El precio no puede ser negativo");
+                error.statusCode = 400;
+                throw error;
+            }
+            updateData.price = price;
+        }
+
+        if (date !== undefined) {
+            const newDate = new Date(date);
+
+            if (isNaN(newDate.getTime())) {
+                const error = new Error("La fecha del evento no es válida");
+                error.statusCode = 400;
+                throw error;
+            }
+
+            if (newDate <= new Date()) {
+                const error = new Error("La fecha del evento debe ser futura");
+                error.statusCode = 400;
+                throw error;
+            }
+
+            updateData.date = newDate;
+        }
+
+        return await eventsRepository.updateEvent(id, updateData);
     }
 }
 

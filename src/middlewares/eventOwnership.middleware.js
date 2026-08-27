@@ -7,7 +7,11 @@ export const authorizeEventOwnerOrAdmin = async (req, res, next) => {
         const event = await eventsService.getEventById(id);
 
         const isAdmin = req.user.role === "admin";
-        const isOwner = event.organizer.toString() === req.user.id;
+        const organizerId = event.organizer?._id
+            ? event.organizer._id.toString()
+            : event.organizer.toString();
+
+        const isOwner = organizerId === req.user.id;
 
         if (!isAdmin && !isOwner) {
             const authError = new Error(

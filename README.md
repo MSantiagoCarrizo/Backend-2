@@ -156,38 +156,106 @@ Respuesta:
 
 ---
 
+## Categorías
+
+Las categorías clasifican los eventos y se modelan como una entidad independiente (`name`, `description`), referenciada desde `Event.category` mediante su `ObjectId`.
+
+Actualmente no exponen endpoints propios (`/api/categories`); se administran directamente en la base de datos. Para crear una categoría, se inserta un documento en la colección `categories`:
+
+```json
+{ "name": "Tecnología", "description": "Cursos y talleres de programación." }
+```
+
+El `_id` generado es el valor que debe usarse en el campo `category` al crear un evento.
+
+---
+
 ## Events
+
+### Modelo `Event`
+
+| Campo | Tipo | Detalle |
+|---|---|---|
+| `title` | String | obligatorio |
+| `description` | String | obligatorio |
+| `category` | ObjectId (ref `Category`) | obligatorio |
+| `date` | Date | obligatorio, debe ser futura al crear |
+| `location` | String | obligatorio |
+| `capacity` | Number | obligatorio, > 0 |
+| `price` | Number | opcional, default `0`, ≥ 0 |
+| `status` | String | `draft` \| `published` \| `cancelled` \| `finished`, default `draft` |
+| `organizer` | ObjectId (ref `User`) | asignado automáticamente desde `req.user` |
 
 ### GET `/api/events`
 
-Obtiene la lista de eventos. Ruta pública, no requiere autenticación.
+Lista eventos. Ruta pública. Soporta filtros, paginación y ordenamiento vía query params.
+
+| Query param | Descripción |
+|---|---|
+| `status` | `draft` \| `published` \| `cancelled` \| `finished` |
+| `category` | `_id` de una categoría |
+| `location` | búsqueda parcial, case-insensitive |
+| `dateFrom` / `dateTo` | rango de fechas |
+| `search` | busca en `title` o `description` |
+| `page` | página actual (default `1`) |
+| `limit` | resultados por página (default `10`, máximo `50`) |
+| `sort` | `date`, `title`, `price`, `capacity`, `createdAt`. Prefijo `-` para descendente |
+
+Ejemplo: `GET /api/events?status=published&category=65f1...&page=2&limit=5&sort=-date`
 
 ### Respuesta exitosa (200)
 
 ```json
 {
   "status": "success",
-  "payload": [
+  "data": [
     {
       "_id": "66f...",
       "title": "Curso de JavaScript",
-      "description": "Introducción a JS moderno",
-      "date": "2026-09-15T00:00:00.000Z",
-      "location": "Online",
-      "capacity": 30,
-      "organizer": "66a...",
-      "createdAt": "...",
-      "updatedAt": "..."
+      "category": { "_id": "65f1...", "name": "Tecnología" },
+      "organizer": { "_id": "66a...", "first_name": "Marco", "last_name": "Carrizo", "email": "marco@ejemplo.com" },
+      "status": "published"
     }
-  ]
+  ],
+  "page": 2,
+  "limit": 5,
+  "total": 12,
+  "totalPages": 3
 }
+```
+
+---
+
+### GET `/api/events/:id`
+
+Obtiene el detalle de un evento, con `category` y `organizer` poblados. Ruta pública.
+
+### Respuesta exitosa (200)
+
+```json
+{
+  "status": "success",
+  "payload": {
+    "_id": "66f...",
+    "title": "Curso de JavaScript",
+    "category": { "_id": "65f1...", "name": "Tecnología" },
+    "organizer": { "_id": "66a...", "first_name": "Marco", "last_name": "Carrizo", "email": "marco@ejemplo.com" },
+    "status": "published"
+  }
+}
+```
+
+### Error (404)
+
+```json
+{ "status": "error", "message": "Evento no encontrado" }
 ```
 
 ---
 
 ### POST `/api/events`
 
-Crea un evento nuevo. Requiere estar autenticado y tener rol `organizer` o `admin`. El campo `organizer` se asigna automáticamente a partir del usuario autenticado; nunca se toma del body.
+Crea un evento nuevo. Requiere estar autenticado y tener rol `organizer` o `admin`. El campo `organizer` se asigna automáticamente a partir del usuario autenticado; nunca se toma del body. El campo `status` tampoco se toma del body: todo evento nace en `draft`.
 
 ### Body
 
@@ -195,9 +263,11 @@ Crea un evento nuevo. Requiere estar autenticado y tener rol `organizer` o `admi
 {
   "title": "Curso de JavaScript",
   "description": "Introducción a JS moderno",
-  "date": "2026-09-15",
+  "category": "65f1...",
+  "date": "2026-12-01",
   "location": "Online",
-  "capacity": 30
+  "capacity": 30,
+  "price": 0
 }
 ```
 
@@ -209,6 +279,7 @@ Crea un evento nuevo. Requiere estar autenticado y tener rol `organizer` o `admi
   "payload": {
     "_id": "66f...",
     "title": "Curso de JavaScript",
+    "status": "draft",
     "organizer": "66a...",
     "createdAt": "...",
     "updatedAt": "..."
@@ -236,11 +307,23 @@ Crea un evento nuevo. Requiere estar autenticado y tener rol `organizer` o `admi
 { "status": "error", "message": "Faltan campos obligatorios" }
 ```
 
+**400 - Fecha pasada**
+
+```json
+{ "status": "error", "message": "La fecha del evento debe ser futura" }
+```
+
+**400 - Categoría inexistente**
+
+```json
+{ "status": "error", "message": "La categoría indicada no existe" }
+```
+
 ---
 
 ### PUT `/api/events/:id`
 
-Actualiza un evento existente. Requiere estar autenticado y tener rol `organizer` o `admin`. Si el rol es `organizer`, solo puede modificar eventos de los que es dueño. El rol `admin` puede modificar cualquier evento.
+Actualiza los datos de un evento existente. Requiere ser el `organizer` dueño del evento o tener rol `admin`. Los campos `organizer` y `status` se ignoran si vienen en el body. No permite editar eventos `cancelled` o `finished`.
 
 ### Body
 
@@ -256,11 +339,7 @@ Actualiza un evento existente. Requiere estar autenticado y tener rol `organizer
 ```json
 {
   "status": "success",
-  "payload": {
-    "_id": "66f...",
-    "title": "Curso de JavaScript (actualizado)",
-    "capacity": 40
-  }
+  "payload": { "_id": "66f...", "title": "Curso de JavaScript (actualizado)", "capacity": 40 }
 }
 ```
 
@@ -270,12 +349,6 @@ Actualiza un evento existente. Requiere estar autenticado y tener rol `organizer
 
 ```json
 { "status": "error", "message": "No autenticado" }
-```
-
-**403 - Rol sin permiso**
-
-```json
-{ "status": "error", "message": "No tenés permisos para realizar esta acción" }
 ```
 
 **403 - No es el dueño del evento**
@@ -289,6 +362,63 @@ Actualiza un evento existente. Requiere estar autenticado y tener rol `organizer
 ```json
 { "status": "error", "message": "Evento no encontrado" }
 ```
+
+**400 - Evento cancelado o finalizado**
+
+```json
+{ "status": "error", "message": "No se puede modificar un evento cancelado" }
+```
+
+---
+
+### PATCH `/api/events/:id/status`
+
+Cambia el estado de un evento (`draft`, `published`, `cancelled`, `finished`). Mismo control de propiedad que `PUT`. Cancelar un evento no lo elimina: solo cambia su `status`, conservando el historial.
+
+### Body
+
+```json
+{ "status": "published" }
+```
+
+### Respuesta exitosa (200)
+
+```json
+{
+  "status": "success",
+  "payload": { "_id": "66f...", "status": "published" }
+}
+```
+
+### Posibles respuestas de error
+
+**400 - Evento cancelado o finalizado**
+
+```json
+{ "status": "error", "message": "No se puede modificar el estado de un evento cancelado o finalizado" }
+```
+
+**400 - Publicar con fecha ya pasada**
+
+```json
+{ "status": "error", "message": "No se puede publicar un evento que ya finalizó" }
+```
+
+**401 / 403 / 404**: mismas respuestas que `PUT /api/events/:id`.
+
+---
+
+## Reglas de negocio de eventos
+
+Toda la lógica vive en `events.service.js`, nunca en rutas o controllers.
+
+- No se puede crear un evento con `date` pasada.
+- `capacity` debe ser mayor a 0; `price` no puede ser negativo.
+- `category` debe existir en la colección `Category`.
+- Un evento `cancelled` o `finished` no puede editarse ni cambiar de estado nuevamente.
+- No se puede publicar un evento cuya fecha ya pasó.
+- Cancelar un evento nunca lo elimina físicamente, solo cambia su `status`.
+- `organizer` y `status` nunca se toman del body en `PUT`; `organizer` es inmutable y `status` solo cambia con `PATCH /:id/status`.
 
 ---
 
@@ -558,6 +688,7 @@ El rol se asigna por defecto como `user` al registrarse y **nunca** puede asigna
 | Modificar eventos propios | ❌ | ✅ | ✅ |
 | Modificar cualquier evento | ❌ | ❌ | ✅ |
 | Ver todos los usuarios | ❌ | ❌ | ✅ |
+| Cambiar estado de eventos propios (publicar/cancelar) | ❌ | ✅ | ✅ |
 
 ## Diferencia entre 401 y 403
 
@@ -580,13 +711,21 @@ router.put(
     authorizeEventOwnerOrAdmin,
     updateEvent
 );
+
+router.patch(
+    "/:id/status",
+    auth,
+    authorizeRoles("organizer", "admin"),
+    authorizeEventOwnerOrAdmin,
+    updateEventStatus
+);
 ```
 
-Primero se valida identidad (401), después rol (403), y por último propiedad del recurso (403/404).
+Primero se valida identidad (401), después rol (403), y por último propiedad del recurso (403/404). `PATCH /:id/status` sigue exactamente la misma cadena que `PUT /:id`.
 
 ---
 
-# Variables de entorno 
+# Variables de entorno
 
 El proyecto utiliza variables de entorno para configurar el servidor, la conexión a MongoDB y la autenticación mediante JWT.
 

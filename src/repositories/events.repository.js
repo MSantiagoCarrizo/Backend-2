@@ -5,8 +5,12 @@ class EventsRepository {
         return await eventsDAO.createEvent(eventData);
     }
 
-    async getEvents() {
-        return await eventsDAO.getEvents();
+    async getEvents(filter, options) {
+        return await eventsDAO.getEvents(filter, options);
+    }
+
+    async countEvents(filter) {
+        return await eventsDAO.countEvents(filter);
     }
 
     async getEventById(id) {

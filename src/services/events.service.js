@@ -3,8 +3,66 @@ import eventsRepository from "../repositories/events.repository.js";
 import categoriesRepository from "../repositories/categories.repository.js";
 
 class EventsService {
-    async getEvents() {
-        return await eventsRepository.getEvents();
+    async getEvents(query = {}) {
+        const {
+            status,
+            category,
+            location,
+            dateFrom,
+            dateTo,
+            search,
+            page = 1,
+            limit = 10,
+            sort = "date"
+        } = query;
+
+        const filter = {};
+
+        if (status) {
+            filter.status = status;
+        }
+
+        if (category && mongoose.Types.ObjectId.isValid(category)) {
+            filter.category = category;
+        }
+
+        if (location) {
+            filter.location = { $regex: location, $options: "i" };
+        }
+
+        if (dateFrom || dateTo) {
+            filter.date = {};
+            if (dateFrom) filter.date.$gte = new Date(dateFrom);
+            if (dateTo) filter.date.$lte = new Date(dateTo);
+        }
+
+        if (search) {
+            filter.$or = [
+                { title: { $regex: search, $options: "i" } },
+                { description: { $regex: search, $options: "i" } }
+            ];
+        }
+
+        const allowedSortFields = ["date", "title", "price", "capacity", "createdAt"];
+        const sortField = String(sort).replace(/^-/, "");
+        const sortOption = allowedSortFields.includes(sortField) ? sort : "date";
+
+        const pageNumber = Math.max(Number(page) || 1, 1);
+        const limitNumber = Math.min(Math.max(Number(limit) || 10, 1), 50);
+        const skip = (pageNumber - 1) * limitNumber;
+
+        const [data, total] = await Promise.all([
+            eventsRepository.getEvents(filter, { skip, limit: limitNumber, sort: sortOption }),
+            eventsRepository.countEvents(filter)
+        ]);
+
+        return {
+            data,
+            page: pageNumber,
+            limit: limitNumber,
+            total,
+            totalPages: limitNumber > 0 ? Math.ceil(total / limitNumber) : 0
+        };
     }
 
     async createEvent(eventData, organizerId) {

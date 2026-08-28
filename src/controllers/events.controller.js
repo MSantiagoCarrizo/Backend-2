@@ -2,9 +2,16 @@ import eventsService from "../services/events.service.js";
 
 export const getEvents = async (req, res, next) => {
     try {
-        const events = await eventsService.getEvents();
+        const { data, page, limit, total, totalPages } = await eventsService.getEvents(req.query);
 
-        return res.status(200).json({ status: "success", payload: events });
+        return res.status(200).json({
+            status: "success",
+            data,
+            page,
+            limit,
+            total,
+            totalPages
+        });
     } catch (error) {
         next(error);
     }

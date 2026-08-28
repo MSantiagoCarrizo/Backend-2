@@ -5,8 +5,17 @@ class EventsDAO {
         return await Event.create(eventData);
     }
 
-    async getEvents() {
-        return await Event.find();
+    async getEvents(filter, { skip, limit, sort }) {
+        return await Event.find(filter)
+            .populate("category")
+            .populate("organizer", "first_name last_name email")
+            .sort(sort)
+            .skip(skip)
+            .limit(limit);
+    }
+
+    async countEvents(filter) {
+        return await Event.countDocuments(filter);
     }
 
     async getEventById(id) {

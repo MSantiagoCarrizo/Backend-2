@@ -15,6 +15,7 @@ API REST desarrollada con Node.js, Express y MongoDB para la gestión de usuario
 - passport.js
 - passport-local
 - passport-jwt
+- nodemailer
 
 ## Instalación
 
@@ -46,6 +47,11 @@ MONGO_URL=tu_cadena_de_conexion
 JWT_SECRET=tu_clave_secreta
 JWT_EXPIRES_IN=1h
 NODE_ENV=development
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USER=tu_correo@gmail.com
+MAIL_PASS=clave_de_aplicacion
+MAIL_FROM=tu_correo@gmail.com
 ```
 
 5. Ejecutar el proyecto:
@@ -422,6 +428,203 @@ Toda la lógica vive en `events.service.js`, nunca en rutas o controllers.
 
 ---
 
+## Tickets (inscripciones)
+
+Un `Ticket` representa la inscripción de un usuario a un evento. Conecta `User` y `Event`, y solo contiene referencias, nunca objetos embebidos.
+
+### Modelo `Ticket`
+
+| Campo | Tipo | Detalle |
+|---|---|---|
+| `user` | ObjectId (ref `User`) | obligatorio, se asigna desde `req.user`, nunca del body |
+| `event` | ObjectId (ref `Event`) | obligatorio |
+| `status` | String | `confirmed` \| `pending` \| `cancelled`, default `confirmed` |
+| `quantity` | Number | default `1`, mínimo `1` |
+| `reservationCode` | String | único, generado automáticamente (`TCK-XXXXXX`) |
+| `cancelledAt` | Date | `null` hasta que se cancela |
+
+Cancelar un ticket **nunca** elimina el documento: solo cambia `status` a `cancelled` y completa `cancelledAt`, para conservar historial.
+
+### Endpoints
+
+| Método | Ruta | Acceso |
+|---|---|---|
+| `POST` | `/api/events/:eid/tickets` | autenticado (cualquier rol) |
+| `GET` | `/api/tickets/my-tickets` | autenticado (propios) |
+| `GET` | `/api/events/:eid/tickets` | `organizer` dueño del evento, o `admin` |
+| `PATCH` | `/api/tickets/:tid/cancel` | dueño del ticket, o `admin` |
+
+---
+
+### POST `/api/events/:eid/tickets`
+
+Inscribe al usuario autenticado al evento `:eid`. El `user` del ticket sale de `req.user`, nunca del body.
+
+#### Body
+
+```json
+{ "quantity": 1 }
+```
+
+`quantity` es opcional (default `1`).
+
+#### Respuesta exitosa (201)
+
+```json
+{
+  "status": "success",
+  "payload": {
+    "_id": "66f...",
+    "user": "66a...",
+    "event": "66f...",
+    "status": "confirmed",
+    "quantity": 1,
+    "reservationCode": "TCK-3F2A9C"
+  }
+}
+```
+
+Si la inscripción se crea correctamente, se envía un email de confirmación con Nodemailer al correo del usuario. Si el envío del email falla, la inscripción **igual queda creada**: el email es una notificación posterior, no forma parte de la operación principal.
+
+#### Posibles respuestas de error
+
+**401 - No autenticado**
+
+```json
+{ "status": "error", "message": "No autenticado" }
+```
+
+**404 - Evento no encontrado**
+
+```json
+{ "status": "error", "message": "Evento no encontrado" }
+```
+
+**400 - Evento no disponible para inscripciones** (no está `published`)
+
+```json
+{ "status": "error", "message": "El evento no está disponible para inscripciones" }
+```
+
+**400 - Evento finalizado**
+
+```json
+{ "status": "error", "message": "No es posible inscribirse a un evento finalizado" }
+```
+
+**400 - Cantidad inválida**
+
+```json
+{ "status": "error", "message": "La cantidad debe ser mayor a cero" }
+```
+
+**409 - Inscripción duplicada**
+
+```json
+{ "status": "error", "message": "Ya tenés una inscripción activa para este evento" }
+```
+
+**400 - Sin cupo suficiente**
+
+```json
+{ "status": "error", "message": "No hay cupos suficientes disponibles" }
+```
+
+---
+
+### GET `/api/tickets/my-tickets`
+
+Devuelve las inscripciones del usuario autenticado, con el evento poblado (`title`, `date`, `location`, `status`). No expone datos de otros usuarios.
+
+#### Respuesta exitosa (200)
+
+```json
+{
+  "status": "success",
+  "payload": [
+    {
+      "_id": "66f...",
+      "status": "confirmed",
+      "quantity": 1,
+      "reservationCode": "TCK-3F2A9C",
+      "event": { "_id": "66f...", "title": "Curso de JavaScript", "date": "...", "location": "Online", "status": "published" }
+    }
+  ]
+}
+```
+
+---
+
+### GET `/api/events/:eid/tickets`
+
+Lista las inscripciones de un evento puntual. Solo el `organizer` dueño de ese evento o un `admin` pueden verla; incluye datos básicos del usuario inscripto (`first_name`, `last_name`, `email`).
+
+#### Posibles respuestas de error
+
+**401 - No autenticado**, **403 - Sin permiso** (rol `user`, u `organizer` de otro evento), **404 - Evento no encontrado**.
+
+---
+
+### PATCH `/api/tickets/:tid/cancel`
+
+Cancela una inscripción. Solo puede cancelarla el dueño del ticket o un `admin`.
+
+#### Respuesta exitosa (200)
+
+```json
+{
+  "status": "success",
+  "payload": {
+    "_id": "66f...",
+    "status": "cancelled",
+    "cancelledAt": "..."
+  }
+}
+```
+
+Al confirmarse la cancelación se envía un email avisando al usuario (mismo criterio que la confirmación: si el email falla, la cancelación igual queda aplicada).
+
+#### Posibles respuestas de error
+
+**401 - No autenticado**
+
+```json
+{ "status": "error", "message": "No autenticado" }
+```
+
+**403 - Ticket ajeno**
+
+```json
+{ "status": "error", "message": "No tenés permisos para cancelar este ticket" }
+```
+
+**404 - Ticket no encontrado**
+
+```json
+{ "status": "error", "message": "Ticket no encontrado" }
+```
+
+**400 - Ya estaba cancelado**
+
+```json
+{ "status": "error", "message": "El ticket ya está cancelado" }
+```
+
+---
+
+## Reglas de negocio de tickets
+
+Toda la lógica vive en `tickets.service.js`, nunca en rutas o controllers.
+
+- El evento debe existir, estar en estado `published` y no haber finalizado (fecha futura) para aceptar inscripciones.
+- Un usuario no puede tener más de una inscripción activa (`confirmed`) para el mismo evento; sí puede volver a inscribirse si su ticket anterior está `cancelled`.
+- El cupo disponible se calcula como `capacity` menos la suma de `quantity` de los tickets confirmados de ese evento. Los tickets `cancelled` nunca ocupan cupo, por lo que cancelar libera el lugar automáticamente para una nueva inscripción.
+- Cancelar un ticket no lo elimina: cambia su `status` a `cancelled` y completa `cancelledAt`, conservando el historial.
+- El `user` de un ticket siempre sale de `req.user`; nunca se toma del body.
+- Si el envío del email (confirmación o cancelación) falla, la operación principal (crear o cancelar el ticket) igual se completa; el error se registra en el log del servidor.
+
+---
+
 ## Usuarios (admin)
 
 ### GET `/api/users`
@@ -673,9 +876,9 @@ El sistema diferencia dos conceptos: **autenticación** (¿quién sos?) y **auto
 
 ## Roles del sistema
 
-- **`user`**: usuario común. Puede consultar eventos.
-- **`organizer`**: puede crear eventos y modificar únicamente los eventos de los que es dueño.
-- **`admin`**: puede modificar cualquier evento y administrar usuarios.
+- **`user`**: usuario común. Puede consultar eventos e inscribirse a ellos.
+- **`organizer`**: puede crear eventos y modificar únicamente los eventos de los que es dueño, además de ver quiénes se inscribieron a ellos.
+- **`admin`**: puede modificar cualquier evento, administrar usuarios y ver las inscripciones de cualquier evento.
 
 El rol se asigna por defecto como `user` al registrarse y **nunca** puede asignarse desde el body de una petición pública. Solo se modifica manualmente en la base de datos.
 
@@ -689,6 +892,12 @@ El rol se asigna por defecto como `user` al registrarse y **nunca** puede asigna
 | Modificar cualquier evento | ❌ | ❌ | ✅ |
 | Ver todos los usuarios | ❌ | ❌ | ✅ |
 | Cambiar estado de eventos propios (publicar/cancelar) | ❌ | ✅ | ✅ |
+| Inscribirse a un evento (crear ticket) | ✅ | ✅ | ✅ |
+| Ver las propias inscripciones | ✅ | ✅ | ✅ |
+| Ver inscriptos de eventos propios | ❌ | ✅ | ✅ |
+| Ver inscriptos de cualquier evento | ❌ | ❌ | ✅ |
+| Cancelar la propia inscripción | ✅ | ✅ | ✅ |
+| Cancelar inscripciones ajenas | ❌ | ❌ | ✅ |
 
 ## Diferencia entre 401 y 403
 
@@ -699,7 +908,7 @@ El rol se asigna por defecto como `user` al registrarse y **nunca** puede asigna
 
 - **`auth.middleware.js`**: valida el JWT desde la cookie `currentUser` (reutilizando la estrategia `current` de Passport) y responde 401 si no hay sesión válida.
 - **`authorize.middleware.js`** (`authorizeRoles`): recibe los roles permitidos para una ruta y responde 403 si el rol del usuario autenticado no está entre ellos.
-- **`eventOwnership.middleware.js`** (`authorizeEventOwnerOrAdmin`): para rutas que modifican un evento puntual, valida que el usuario sea el `organizer` dueño del evento o tenga rol `admin`. Responde 404 si el evento no existe, y 403 si no es el dueño ni admin.
+- **`eventOwnership.middleware.js`** (`authorizeEventOwnerOrAdmin`): para rutas que modifican un evento puntual, valida que el usuario sea el `organizer` dueño del evento o tenga rol `admin`. Responde 404 si el evento no existe, y 403 si no es el dueño ni admin. La misma validación se reutiliza como `authorizeEventOrganizerOrAdmin` para `GET /api/events/:eid/tickets` (listar inscriptos), leyendo el parámetro `eid` en vez de `id`.
 
 Estas validaciones se combinan en cadena en las rutas protegidas, por ejemplo:
 
@@ -719,15 +928,31 @@ router.patch(
     authorizeEventOwnerOrAdmin,
     updateEventStatus
 );
+
+router.get(
+    "/:eid/tickets",
+    auth,
+    authorizeRoles("organizer", "admin"),
+    authorizeEventOrganizerOrAdmin,
+    getEventTickets
+);
 ```
 
-Primero se valida identidad (401), después rol (403), y por último propiedad del recurso (403/404). `PATCH /:id/status` sigue exactamente la misma cadena que `PUT /:id`.
+Primero se valida identidad (401), después rol (403), y por último propiedad del recurso (403/404). `PATCH /:id/status` y `GET /:eid/tickets` siguen exactamente la misma cadena que `PUT /:id`.
+
+---
+
+# Notificaciones por email (Nodemailer)
+
+Al confirmarse o cancelarse una inscripción, el backend envía un email al usuario usando Nodemailer. El envío se ejecuta después de haber creado/cancelado el ticket en la base de datos: si el email falla, la operación principal ya quedó aplicada, y el error solo se registra en el log del servidor (no se devuelve como error al cliente).
+
+La configuración del transporter vive en `src/config/mailer.config.js`, y las funciones de armado y envío de cada email en `src/services/mail.service.js`.
 
 ---
 
 # Variables de entorno
 
-El proyecto utiliza variables de entorno para configurar el servidor, la conexión a MongoDB y la autenticación mediante JWT.
+El proyecto utiliza variables de entorno para configurar el servidor, la conexión a MongoDB, la autenticación mediante JWT y el envío de emails.
 
 El archivo `.env` contiene los valores reales y no debe subirse al repositorio.
 
@@ -739,6 +964,11 @@ MONGO_URL=tu_cadena_de_conexion
 JWT_SECRET=tu_clave_secreta
 JWT_EXPIRES_IN=1h
 NODE_ENV=development
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USER=tu_correo@gmail.com
+MAIL_PASS=clave_de_aplicacion
+MAIL_FROM=tu_correo@gmail.com
 ```
 
 ---
@@ -757,9 +987,11 @@ NODE_ENV=development
 - `JWT_SECRET` se obtiene desde variables de entorno.
 - La cookie utiliza `secure: true` solamente en producción
 - Autorización por rol mediante middleware reutilizable (`authorizeRoles`).
-- Validación de propiedad de recursos: un `organizer` solo modifica sus propios eventos.
+- Validación de propiedad de recursos: un `organizer` solo modifica sus propios eventos y solo ve los inscriptos de sus propios eventos.
 - Diferenciación explícita entre error de autenticación (401) y de autorización (403).
 - El rol de un usuario nunca se toma del body de una petición pública.
+- El `user` de un ticket nunca se toma del body de una petición pública; siempre sale del JWT.
+- Credenciales de email (`MAIL_USER`, `MAIL_PASS`) obtenidas desde variables de entorno, nunca hardcodeadas.
 
 ---
 

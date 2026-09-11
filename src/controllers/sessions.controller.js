@@ -1,4 +1,5 @@
 import { generateToken } from "../utils/jwt.js";
+import { CurrentUserDTO } from "../dto/current-user.dto.js";
 
 export const getSessions = async (req, res, next) => {
     try {
@@ -55,15 +56,11 @@ export const login = async (req, res, next) => {
 
 export const current = (req, res, next) => {
     try {
-        const { id, email, role } = req.user;
+        const userDTO = new CurrentUserDTO(req.user);
 
         return res.status(200).json({
             status: "success",
-            payload: {
-                id,
-                email,
-                role
-            }
+            payload: userDTO
         });
     } catch (error) {
         next(error);

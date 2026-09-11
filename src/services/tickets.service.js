@@ -45,10 +45,9 @@ class TicketsService {
             throw error;
         }
 
-        const reserved = await ticketsRepository.getReservedQuantity(event._id);
-        const available = event.capacity - reserved;
+        const updatedEvent = await eventsRepository.reserveCapacity(event._id, parsedQuantity);
 
-        if (parsedQuantity > available) {
+        if (!updatedEvent) {
             const error = new Error("No hay cupos suficientes disponibles");
             error.statusCode = 400;
             throw error;
@@ -56,13 +55,20 @@ class TicketsService {
 
         const reservationCode = generateReservationCode();
 
-        const ticket = await ticketsRepository.createTicket({
-            user: user.id,
-            event: event._id,
-            quantity: parsedQuantity,
-            reservationCode,
-            status: "confirmed"
-        });
+        let ticket;
+
+        try {
+            ticket = await ticketsRepository.createTicket({
+                user: user.id,
+                event: event._id,
+                quantity: parsedQuantity,
+                reservationCode,
+                status: "confirmed"
+            });
+        } catch (creationError) {
+            await eventsRepository.releaseCapacity(event._id, parsedQuantity);
+            throw creationError;
+        }
 
         const fullUser = await usersRepository.getUserByEmail(user.email);
 
@@ -108,6 +114,8 @@ class TicketsService {
             status: "cancelled",
             cancelledAt: new Date()
         });
+
+        await eventsRepository.releaseCapacity(ticket.event._id, ticket.quantity);
 
         const fullUser = await usersRepository.getUserByEmail(user.email);
 

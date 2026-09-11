@@ -20,6 +20,14 @@ class EventsRepository {
     async updateEvent(id, eventData) {
         return await eventsDAO.updateEvent(id, eventData);
     }
+
+    async reserveCapacity(eventId, quantity) {
+        return await eventsDAO.reserveCapacity(eventId, quantity);
+    }
+
+    async releaseCapacity(eventId, quantity) {
+        return await eventsDAO.releaseCapacity(eventId, quantity);
+    }
 }
 
 export default new EventsRepository();

@@ -30,6 +30,30 @@ class EventsDAO {
             runValidators: true
         });
     }
+
+    async reserveCapacity(eventId, quantity) {
+        return await Event.findOneAndUpdate(
+            {
+                _id: eventId,
+                $expr: {
+                    $lte: [
+                        { $add: ["$reservedSeats", quantity] },
+                        "$capacity"
+                    ]
+                }
+            },
+            { $inc: { reservedSeats: quantity } },
+            { new: true }
+        );
+    }
+
+    async releaseCapacity(eventId, quantity) {
+        return await Event.findByIdAndUpdate(
+            eventId,
+            { $inc: { reservedSeats: -quantity } },
+            { new: true }
+        );
+    }
 }
 
 export default new EventsDAO();

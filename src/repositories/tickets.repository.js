@@ -13,10 +13,6 @@ class TicketsRepository {
         return await ticketsDAO.getActiveTicketByUserAndEvent(userId, eventId);
     }
 
-    async getReservedQuantity(eventId) {
-        return await ticketsDAO.getReservedQuantity(eventId);
-    }
-
     async getTicketsByUser(userId) {
         return await ticketsDAO.getTicketsByUser(userId);
     }

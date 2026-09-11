@@ -17,25 +17,6 @@ class TicketsDAO {
         });
     }
 
-    async getReservedQuantity(eventId) {
-        const result = await Ticket.aggregate([
-            {
-                $match: {
-                    event: eventId,
-                    status: "confirmed"
-                }
-            },
-            {
-                $group: {
-                    _id: "$event",
-                    totalReserved: { $sum: "$quantity" }
-                }
-            }
-        ]);
-
-        return result[0]?.totalReserved || 0;
-    }
-
     async getTicketsByUser(userId) {
         return await Ticket.find({ user: userId })
             .populate("event", "title date location status");

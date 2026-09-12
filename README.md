@@ -37,22 +37,7 @@ cd backend-2
 npm install
 ```
 
-4. Crear un archivo `.env` tomando como referencia `.env.example`.
-
-Ejemplo:
-
-```env
-PORT=8080
-MONGO_URL=tu_cadena_de_conexion
-JWT_SECRET=tu_clave_secreta
-JWT_EXPIRES_IN=1h
-NODE_ENV=development
-MAIL_HOST=smtp.gmail.com
-MAIL_PORT=587
-MAIL_USER=tu_correo@gmail.com
-MAIL_PASS=clave_de_aplicacion
-MAIL_FROM=tu_correo@gmail.com
-```
+4. Crear un archivo `.env` tomando como referencia `.env.example`. El detalle de cada variable está en la sección [Variables de entorno](#variables-de-entorno), más abajo.
 
 5. Ejecutar el proyecto:
 
@@ -77,6 +62,7 @@ src
 ├── config
 ├── controllers
 ├── dao
+├── dto
 ├── middlewares
 ├── models
 ├── repositories
@@ -86,6 +72,42 @@ src
 ├── app.js
 └── server.js
 ```
+
+---
+
+# Arquitectura en capas
+
+El proyecto separa responsabilidades en capas, donde cada una tiene una única función clara. Una petición recorre el sistema de la siguiente forma:
+
+```
+Route → Controller → Service → Repository → DAO → Model
+```
+
+Y al momento de responder:
+
+```
+Model → Repository → Service → Controller → DTO → Response
+```
+
+## Responsabilidad de cada capa
+
+- **Routes**: definen los endpoints disponibles y qué middlewares/controller ejecutar. No contienen lógica de negocio.
+- **Controllers**: reciben la request y arman la response. No calculan cupos, no validan reglas de negocio y no importan modelos de Mongoose — todo eso se delega al service.
+- **Services**: concentran toda la lógica de negocio (validaciones de eventos, control de cupos, duplicados, permisos sobre recursos propios, disparo de emails). Nunca acceden a los modelos directamente, siempre a través de un repository.
+- **Repositories**: capa intermedia entre el service y el DAO, con métodos orientados al dominio (`getEventById`, `getActiveTicketByUserAndEvent`, `reserveCapacity`). No importan modelos directamente.
+- **DAO** (Data Access Object): única capa que importa los modelos de Mongoose y ejecuta las consultas concretas (`find`, `findOneAndUpdate`, `aggregate`, etc.).
+- **Models**: definen los schemas de Mongoose y las validaciones a nivel de base de datos.
+- **DTO** (Data Transfer Object): controlan qué datos viajan hacia el cliente en la respuesta final. Transforman los documentos de Mongoose (que pueden tener campos internos o sensibles) en una forma controlada y segura.
+
+## DTOs implementados
+
+| DTO | Usado en | Filtra |
+|---|---|---|
+| `CurrentUserDTO` | `GET /api/sessions/current` | Expone solo `id`, `email`, `role` |
+| `EventResponseDTO` | Todos los endpoints de `/api/events` | Si `category`/`organizer` vienen poblados, los reduce a sus campos mínimos (`id`, `name`, `description` / `id`, `first_name`, `last_name`, `email`) |
+| `TicketResponseDTO` | Todos los endpoints de `/api/tickets` y `/api/events/:eid/tickets` | Nunca expone `password`; si `event`/`user` vienen poblados, los reduce a sus campos mínimos |
+
+Ningún DTO valida reglas de negocio ni consulta la base de datos — solo dan forma a la salida. Esa responsabilidad sigue siendo exclusiva de los services.
 
 ---
 
@@ -188,6 +210,7 @@ El `_id` generado es el valor que debe usarse en el campo `category` al crear un
 | `date` | Date | obligatorio, debe ser futura al crear |
 | `location` | String | obligatorio |
 | `capacity` | Number | obligatorio, > 0 |
+| `reservedSeats` | Number | default `0`, ≥ 0. Contador de lugares ya reservados, actualizado de forma atómica |
 | `price` | Number | opcional, default `0`, ≥ 0 |
 | `status` | String | `draft` \| `published` \| `cancelled` \| `finished`, default `draft` |
 | `organizer` | ObjectId (ref `User`) | asignado automáticamente desde `req.user` |
@@ -618,7 +641,7 @@ Toda la lógica vive en `tickets.service.js`, nunca en rutas o controllers.
 
 - El evento debe existir, estar en estado `published` y no haber finalizado (fecha futura) para aceptar inscripciones.
 - Un usuario no puede tener más de una inscripción activa (`confirmed`) para el mismo evento; sí puede volver a inscribirse si su ticket anterior está `cancelled`.
-- El cupo disponible se calcula como `capacity` menos la suma de `quantity` de los tickets confirmados de ese evento. Los tickets `cancelled` nunca ocupan cupo, por lo que cancelar libera el lugar automáticamente para una nueva inscripción.
+- El cupo se controla mediante el contador `reservedSeats` del propio evento, no recalculando sobre la colección de tickets en cada inscripción. Reservar y liberar cupo son operaciones atómicas (`findOneAndUpdate` con condición `$expr`), para que dos inscripciones simultáneas nunca puedan superar la `capacity` del evento aunque lleguen al mismo tiempo. Cancelar un ticket libera automáticamente su cupo restando de `reservedSeats`.
 - Cancelar un ticket no lo elimina: cambia su `status` a `cancelled` y completa `cancelledAt`, conservando el historial.
 - El `user` de un ticket siempre sale de `req.user`; nunca se toma del body.
 - Si el envío del email (confirmación o cancelación) falla, la operación principal (crear o cancelar el ticket) igual se completa; el error se registra en el log del servidor.

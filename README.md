@@ -104,8 +104,9 @@ Model → Repository → Service → Controller → DTO → Response
 | DTO | Usado en | Filtra |
 |---|---|---|
 | `CurrentUserDTO` | `GET /api/sessions/current` | Expone solo `id`, `email`, `role` |
-| `EventResponseDTO` | Todos los endpoints de `/api/events` | Si `category`/`organizer` vienen poblados, los reduce a sus campos mínimos (`id`, `name`, `description` / `id`, `first_name`, `last_name`, `email`) |
-| `TicketResponseDTO` | Todos los endpoints de `/api/tickets` y `/api/events/:eid/tickets` | Nunca expone `password`; si `event`/`user` vienen poblados, los reduce a sus campos mínimos |
+| `EventResponseDTO` | Todos los endpoints de `/api/events` | Si `category`/`organizer` vienen poblados, los reduce a sus campos mínimos (`id`, `name`, `description` / `id`, `first_name`, `last_name`, `email`); si no, deja pasar el `id` en crudo. No expone `createdAt`/`updatedAt`/`reservedSeats` |
+| `TicketResponseDTO` | Todos los endpoints de `/api/tickets` y `/api/events/:eid/tickets` | Nunca expone `password`; si `event`/`user` vienen poblados, los reduce a sus campos mínimos, si no, deja pasar el `id` en crudo |
+| `UserResponseDTO` | `POST /api/sessions/register`, `GET /api/users` | Expone `id`, `first_name`, `last_name`, `email`, `role` — nunca `password`, ni `createdAt`/`updatedAt` |
 
 Ningún DTO valida reglas de negocio ni consulta la base de datos — solo dan forma a la salida. Esa responsabilidad sigue siendo exclusiva de los services.
 
@@ -210,7 +211,7 @@ El `_id` generado es el valor que debe usarse en el campo `category` al crear un
 | `date` | Date | obligatorio, debe ser futura al crear |
 | `location` | String | obligatorio |
 | `capacity` | Number | obligatorio, > 0 |
-| `reservedSeats` | Number | default `0`, ≥ 0. Contador de lugares ya reservados, actualizado de forma atómica |
+| `reservedSeats` | Number | default `0`, ≥ 0. Contador de lugares ya reservados, actualizado de forma atómica. No se expone en las respuestas (no pasa por `EventResponseDTO`) |
 | `price` | Number | opcional, default `0`, ≥ 0 |
 | `status` | String | `draft` \| `published` \| `cancelled` \| `finished`, default `draft` |
 | `organizer` | ObjectId (ref `User`) | asignado automáticamente desde `req.user` |
@@ -239,11 +240,16 @@ Ejemplo: `GET /api/events?status=published&category=65f1...&page=2&limit=5&sort=
   "status": "success",
   "data": [
     {
-      "_id": "66f...",
+      "id": "66f...",
       "title": "Curso de JavaScript",
-      "category": { "_id": "65f1...", "name": "Tecnología" },
-      "organizer": { "_id": "66a...", "first_name": "Marco", "last_name": "Carrizo", "email": "marco@ejemplo.com" },
-      "status": "published"
+      "description": "Introducción a JS moderno",
+      "date": "2026-12-01T00:00:00.000Z",
+      "location": "Online",
+      "capacity": 30,
+      "price": 0,
+      "status": "published",
+      "category": { "id": "65f1...", "name": "Tecnología", "description": "Cursos y talleres de programación." },
+      "organizer": { "id": "66a...", "first_name": "Marco", "last_name": "Carrizo", "email": "marco@ejemplo.com" }
     }
   ],
   "page": 2,
@@ -265,11 +271,16 @@ Obtiene el detalle de un evento, con `category` y `organizer` poblados. Ruta pú
 {
   "status": "success",
   "payload": {
-    "_id": "66f...",
+    "id": "66f...",
     "title": "Curso de JavaScript",
-    "category": { "_id": "65f1...", "name": "Tecnología" },
-    "organizer": { "_id": "66a...", "first_name": "Marco", "last_name": "Carrizo", "email": "marco@ejemplo.com" },
-    "status": "published"
+    "description": "Introducción a JS moderno",
+    "date": "2026-12-01T00:00:00.000Z",
+    "location": "Online",
+    "capacity": 30,
+    "price": 0,
+    "status": "published",
+    "category": { "id": "65f1...", "name": "Tecnología", "description": "Cursos y talleres de programación." },
+    "organizer": { "id": "66a...", "first_name": "Marco", "last_name": "Carrizo", "email": "marco@ejemplo.com" }
   }
 }
 ```
@@ -302,16 +313,22 @@ Crea un evento nuevo. Requiere estar autenticado y tener rol `organizer` o `admi
 
 ### Respuesta exitosa (201)
 
+`category` y `organizer` viajan como `id` en crudo (sin poblar) porque este endpoint no hace `populate` sobre el documento recién creado.
+
 ```json
 {
   "status": "success",
   "payload": {
-    "_id": "66f...",
+    "id": "66f...",
     "title": "Curso de JavaScript",
+    "description": "Introducción a JS moderno",
+    "date": "2026-12-01T00:00:00.000Z",
+    "location": "Online",
+    "capacity": 30,
+    "price": 0,
     "status": "draft",
-    "organizer": "66a...",
-    "createdAt": "...",
-    "updatedAt": "..."
+    "category": "65f1...",
+    "organizer": "66a..."
   }
 }
 ```
@@ -365,10 +382,23 @@ Actualiza los datos de un evento existente. Requiere ser el `organizer` dueño d
 
 ### Respuesta exitosa (200)
 
+Igual que en `POST`, `category` y `organizer` viajan como `id` en crudo (este endpoint tampoco hace `populate`).
+
 ```json
 {
   "status": "success",
-  "payload": { "_id": "66f...", "title": "Curso de JavaScript (actualizado)", "capacity": 40 }
+  "payload": {
+    "id": "66f...",
+    "title": "Curso de JavaScript (actualizado)",
+    "description": "Introducción a JS moderno",
+    "date": "2026-12-01T00:00:00.000Z",
+    "location": "Online",
+    "capacity": 40,
+    "price": 0,
+    "status": "draft",
+    "category": "65f1...",
+    "organizer": "66a..."
+  }
 }
 ```
 
@@ -415,7 +445,18 @@ Cambia el estado de un evento (`draft`, `published`, `cancelled`, `finished`). M
 ```json
 {
   "status": "success",
-  "payload": { "_id": "66f...", "status": "published" }
+  "payload": {
+    "id": "66f...",
+    "title": "Curso de JavaScript",
+    "description": "Introducción a JS moderno",
+    "date": "2026-12-01T00:00:00.000Z",
+    "location": "Online",
+    "capacity": 30,
+    "price": 0,
+    "status": "published",
+    "category": "65f1...",
+    "organizer": "66a..."
+  }
 }
 ```
 
@@ -493,16 +534,20 @@ Inscribe al usuario autenticado al evento `:eid`. El `user` del ticket sale de `
 
 #### Respuesta exitosa (201)
 
+`event` y `user` viajan como `id` en crudo (este endpoint no hace `populate` sobre el ticket recién creado).
+
 ```json
 {
   "status": "success",
   "payload": {
-    "_id": "66f...",
-    "user": "66a...",
-    "event": "66f...",
+    "id": "66f...",
     "status": "confirmed",
     "quantity": 1,
-    "reservationCode": "TCK-3F2A9C"
+    "reservationCode": "TCK-3F2A9C",
+    "cancelledAt": null,
+    "createdAt": "2026-09-15T20:00:00.000Z",
+    "event": "66f...",
+    "user": "66a..."
   }
 }
 ```
@@ -561,16 +606,21 @@ Devuelve las inscripciones del usuario autenticado, con el evento poblado (`titl
 
 #### Respuesta exitosa (200)
 
+`user` viaja como `id` en crudo (es el propio usuario autenticado; este endpoint solo pobla `event`).
+
 ```json
 {
   "status": "success",
   "payload": [
     {
-      "_id": "66f...",
+      "id": "66f...",
       "status": "confirmed",
       "quantity": 1,
       "reservationCode": "TCK-3F2A9C",
-      "event": { "_id": "66f...", "title": "Curso de JavaScript", "date": "...", "location": "Online", "status": "published" }
+      "cancelledAt": null,
+      "createdAt": "2026-09-15T20:00:00.000Z",
+      "event": { "id": "66f...", "title": "Curso de JavaScript", "date": "2026-12-01T00:00:00.000Z", "location": "Online", "status": "published" },
+      "user": "66a..."
     }
   ]
 }
@@ -580,7 +630,7 @@ Devuelve las inscripciones del usuario autenticado, con el evento poblado (`titl
 
 ### GET `/api/events/:eid/tickets`
 
-Lista las inscripciones de un evento puntual. Solo el `organizer` dueño de ese evento o un `admin` pueden verla; incluye datos básicos del usuario inscripto (`first_name`, `last_name`, `email`).
+Lista las inscripciones de un evento puntual. Solo el `organizer` dueño de ese evento o un `admin` pueden verla; incluye datos básicos del usuario inscripto (`id`, `first_name`, `last_name`, `email`). Acá es al revés que en `my-tickets`: se pobla `user`, y `event` viaja como `id` en crudo.
 
 #### Posibles respuestas de error
 
@@ -594,13 +644,20 @@ Cancela una inscripción. Solo puede cancelarla el dueño del ticket o un `admin
 
 #### Respuesta exitosa (200)
 
+`event` y `user` viajan como `id` en crudo (mismo motivo que en la creación: este endpoint no hace `populate`).
+
 ```json
 {
   "status": "success",
   "payload": {
-    "_id": "66f...",
+    "id": "66f...",
     "status": "cancelled",
-    "cancelledAt": "..."
+    "quantity": 1,
+    "reservationCode": "TCK-3F2A9C",
+    "cancelledAt": "2026-09-15T20:10:00.000Z",
+    "createdAt": "2026-09-15T20:00:00.000Z",
+    "event": "66f...",
+    "user": "66a..."
   }
 }
 ```
@@ -661,13 +718,11 @@ Devuelve la lista completa de usuarios registrados, sin incluir contraseñas. Ru
   "status": "success",
   "payload": [
     {
-      "_id": "66a...",
+      "id": "66a...",
       "first_name": "Marco",
       "last_name": "Carrizo",
       "email": "marco@ejemplo.com",
-      "role": "admin",
-      "createdAt": "...",
-      "updatedAt": "..."
+      "role": "admin"
     }
   ]
 }

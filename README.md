@@ -2,6 +2,8 @@
 
 API REST desarrollada con Node.js, Express y MongoDB para la gestión de usuarios y autenticación mediante Passport.js, JWT y cookies HTTP Only.
 
+El dominio de la API está modelado con una nomenclatura genérica de gestión de eventos (`Event`, `Category`, `Ticket`), mientras que el producto está tematizado como una **plataforma de cursos**: cada `Event` representa un curso o taller (por ejemplo, "Curso de JavaScript" o "Curso de Fotografía"), cada `Category` una disciplina (Tecnología, Diseño, Fotografía, etc.), y cada `Ticket` la inscripción de un alumno a un curso. Mantener el modelo de datos genérico permite reutilizar la misma API para cualquier dominio basado en eventos con cupo e inscripciones (charlas, workshops, conferencias, torneos), cambiando únicamente la capa de presentación.
+
 ## Tecnologías utilizadas
 
 - Node.js
@@ -948,6 +950,23 @@ Elimina la cookie de autenticación y cierra la sesión.
 
 ---
 
+# Flujo de autenticación e inscripción
+
+Recorrido completo de la API, desde el registro hasta la cancelación de una inscripción. Cada paso referencia el endpoint correspondiente, documentado en detalle más arriba.
+
+1. **Registro** — `POST /api/sessions/register`. Crea un usuario con rol `user` por defecto.
+2. **Login** — `POST /api/sessions/login`. Devuelve la cookie `currentUser` con el JWT.
+3. **Consultar sesión actual** — `GET /api/sessions/current`. Confirma la identidad del usuario autenticado (`id`, `email`, `role`).
+4. **Crear un evento** — `POST /api/events`. Requiere un usuario con rol `organizer` o `admin` (ver [Usuarios de prueba](#usuarios-de-prueba)). El evento nace en estado `draft`.
+5. **Publicar el evento** — `PATCH /api/events/:id/status` con `{ "status": "published" }`. Solo el `organizer` dueño del evento (o un `admin`) puede hacerlo.
+6. **Inscribirse** — `POST /api/events/:eid/tickets`, con un usuario `user` autenticado. Valida cupo, duplicados y estado del evento; envía un email de confirmación.
+7. **Consultar las propias inscripciones** — `GET /api/tickets/my-tickets`.
+8. **Ver quién se inscribió** (solo el organizador dueño del evento, o un admin) — `GET /api/events/:eid/tickets`.
+9. **Cancelar la inscripción** — `PATCH /api/tickets/:tid/cancel`. Libera el cupo automáticamente y envía un email de cancelación.
+10. **Cerrar sesión** — `POST /api/sessions/logout`. A partir de este punto, `GET /api/sessions/current` vuelve a responder `401`.
+
+---
+
 # Roles y autorización
 
 El sistema diferencia dos conceptos: **autenticación** (¿quién sos?) y **autorización** (¿qué podés hacer?). Un usuario puede estar autenticado y aun así no tener permiso para realizar una acción determinada.
@@ -1017,6 +1036,19 @@ router.get(
 ```
 
 Primero se valida identidad (401), después rol (403), y por último propiedad del recurso (403/404). `PATCH /:id/status` y `GET /:eid/tickets` siguen exactamente la misma cadena que `PUT /:id`.
+
+## Usuarios de prueba
+
+El registro público (`POST /api/sessions/register`) siempre crea usuarios con rol `user`, y ese rol nunca puede asignarse desde el body — es una decisión de seguridad explícita del proyecto. Por lo tanto, no existe ningún endpoint para "promocionarse" a `organizer` o `admin`.
+
+Para probar los flujos de `organizer` y `admin`:
+
+1. Registrar un usuario normal vía `POST /api/sessions/register`.
+2. Conectarse a la base de datos configurada en `MONGO_URL` (por ejemplo desde MongoDB Compass o el visor de colecciones de Atlas) y abrir la colección `users`.
+3. Editar el documento de ese usuario y cambiar el campo `role` a `"organizer"` o `"admin"` a mano.
+4. Loguearse de nuevo con ese usuario (`POST /api/sessions/login`) para obtener un JWT actualizado con el nuevo rol.
+
+Se recomienda tener al menos 3 usuarios de prueba, uno por rol, para poder ejercitar toda la matriz de permisos.
 
 ---
 

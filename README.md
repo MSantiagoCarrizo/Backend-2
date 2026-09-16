@@ -1105,6 +1105,12 @@ MAIL_FROM=tu_correo@gmail.com
 
 ---
 
+# Evidencia de pruebas
+
+El documento [docs/evidencia-entrega-final.pdf](./docs/evidencia-entrega-final.pdf) contiene las capturas de los 10 casos de verificación, probados con Thunder Client contra la base de datos real del proyecto.
+
+---
+
 # Autor
 
 Marcos Santiago Carrizo
